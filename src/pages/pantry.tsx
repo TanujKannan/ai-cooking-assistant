@@ -29,7 +29,10 @@ export default function Pantry() {
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
-  const [shoppingList, setShoppingList] = useState<string[]>([]);
+  const [shoppingList, setShoppingList] = useState<
+    { ingredient: string; recipes: string[] }[]
+  >([]);
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!loading) {
@@ -102,25 +105,37 @@ export default function Pantry() {
       if (!res.ok) throw new Error(data.error || "Something went wrong");
 
       const raw = data.recipes || "";
-const cleaned = raw
-  .replace(/```json\\n?|```/gi, "")
-  .replace(/^json\\n?|^json/gi, "")
-  .trim();
+      const cleaned = raw
+        .replace(/```json\n?|```/gi, "")
+        .replace(/^json\n?|^json/gi, "")
+        .trim();
 
-const parsed: Recipe[] = JSON.parse(cleaned);
+      const parsed: Recipe[] = JSON.parse(cleaned);
       setRecipes(parsed);
 
-      let allIngredients: string[] = [];
+      const ingredientMap: Record<string, Set<string>> = {};
+
       for (const recipe of parsed) {
         const extracted = await extractIngredientsWithGPT(
           `${recipe.title}: ${recipe.instructions.join(" ")}`
         );
-        allIngredients.push(...extracted.map((ing) => ing.toLowerCase()));
+
+        for (const ing of extracted.map((i) => i.toLowerCase())) {
+          if (!pantryIngredients.map((i) => i.toLowerCase()).includes(ing)) {
+            if (!ingredientMap[ing]) {
+              ingredientMap[ing] = new Set();
+            }
+            ingredientMap[ing].add(recipe.title);
+          }
+        }
       }
 
-      const pantrySet = new Set(pantryIngredients.map((i) => i.toLowerCase()));
-      const missing = allIngredients.filter((item) => !pantrySet.has(item));
-      setShoppingList([...new Set(missing)]);
+      setShoppingList(
+        Object.entries(ingredientMap).map(([ingredient, recipes]) => ({
+          ingredient,
+          recipes: Array.from(recipes),
+        }))
+      );
     } catch (err: any) {
       console.error("Recipe generation error:", err);
     } finally {
@@ -248,15 +263,71 @@ const parsed: Recipe[] = JSON.parse(cleaned);
         {shoppingList.length > 0 && (
           <div className="mt-10">
             <h2 className="text-xl font-bold mb-2 text-center">🛒 Shopping List</h2>
-            <ul className="list-disc pl-6 space-y-1 text-gray-800 mb-3">
-              {shoppingList.map((item, idx) => (
-                <li key={idx}>{item}</li>
-              ))}
+            <p className="text-sm text-gray-600 text-center mb-4">
+              These are ingredients used in the suggested recipes but not found in your pantry.
+              Consider adding them to make the dishes!
+            </p>
+
+            <ul className="list-disc pl-6 space-y-2 text-gray-800 mb-3">
+            {shoppingList.map((item, idx) => {
+                const qty = quantities[item.ingredient] || "";
+
+                const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                    setQuantities((prev) => ({
+                    ...prev,
+                    [item.ingredient]: e.target.value,
+                    }));
+                };
+
+                const addToPantry = async () => {
+                    const { error } = await supabase.from("pantry").insert({
+                    user_id: user?.id,
+                    ingredient: item.ingredient,
+                    quantity: qty || null,
+                    });
+                    if (error) {
+                    console.error("Failed to add to pantry:", error);
+                    alert("Error adding to pantry");
+                    } else {
+                    alert(`${item.ingredient} added to pantry`);
+                    loadPantry();
+                    setQuantities((prev) => ({ ...prev, [item.ingredient]: "" }));
+                    }
+                };
+
+                return (
+                    <li key={idx} className="space-y-1">
+                    <span className="font-semibold">{item.ingredient}</span>
+                    <span className="text-sm text-gray-600">
+                        {" "}
+                        — used in: {item.recipes.join(", ")}
+                    </span>
+                    <div className="flex gap-2 mt-1">
+                        <input
+                        type="text"
+                        value={qty}
+                        onChange={handleQtyChange}
+                        placeholder="Quantity"
+                        className="border rounded px-2 py-1 text-sm w-1/2"
+                        />
+                        <button
+                        onClick={addToPantry}
+                        className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                        >
+                        ➕ Add to Pantry
+                        </button>
+                    </div>
+                    </li>
+                );
+                })}
             </ul>
+
             <div className="flex gap-4">
               <button
                 onClick={() =>
-                  navigator.clipboard.writeText(shoppingList.join("\n"))
+                  navigator.clipboard.writeText(
+                    shoppingList.map((i) => i.ingredient).join("\n")
+                  )
                 }
                 className="text-sm bg-gray-200 px-3 py-2 rounded hover:bg-gray-300"
               >
@@ -264,7 +335,7 @@ const parsed: Recipe[] = JSON.parse(cleaned);
               </button>
               <a
                 href={`data:text/plain;charset=utf-8,${encodeURIComponent(
-                  shoppingList.join("\n")
+                  shoppingList.map((i) => i.ingredient).join("\n")
                 )}`}
                 download="shopping-list.txt"
                 className="text-sm bg-blue-100 px-3 py-2 rounded hover:bg-blue-200"
