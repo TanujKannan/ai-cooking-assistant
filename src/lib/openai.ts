@@ -7,13 +7,25 @@ const openai = new OpenAI({
 
 export async function getRecipesFromIngredients(ingredients: string[]) {
   const prompt = `You're an AI cooking assistant. I have the following ingredients: ${ingredients.join(", ")}. 
-Suggest exactly 3 diverse recipes I can cook right now. 
-For each recipe, include:
-- The dish name
-- A 1-2 sentence summary
-- Short, clear step-by-step instructions
-If any essential ingredient is missing, recommend a common substitute or state if it's optional. 
-Focus on simplicity and flavor. Avoid suggesting recipes that require ingredients I don't have.`;
+
+Suggest exactly 3 diverse recipes I can cook using these ingredients.
+
+Return ONLY a JSON array of objects in this format:
+
+[
+  {
+    "title": "Dish Name",
+    "summary": "1-2 sentence description of the dish.",
+    "instructions": ["Step 1...", "Step 2...", "Step 3..."],
+    "substitutes": ["If any", "Otherwise return empty array"]
+  }
+]
+
+Each recipe should use available ingredients or suggest common substitutions.
+Do not include any explanation before or after the JSON.`;
+
+
+
 
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",

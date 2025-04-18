@@ -4,10 +4,19 @@ import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/router";
 import NavBar from "@/components/NavBar";
 
+// 🧱 Type Definitions
+
 type PantryItem = {
   id: string;
   ingredient: string;
   quantity: string | null;
+};
+
+type Recipe = {
+  title: string;
+  summary: string;
+  instructions: string[];
+  substitutes: string[];
 };
 
 export default function Pantry() {
@@ -18,8 +27,9 @@ export default function Pantry() {
   const [input, setInput] = useState("");
   const [quantity, setQuantity] = useState("");
 
-  const [recipes, setRecipes] = useState<string[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
+  const [shoppingList, setShoppingList] = useState<string[]>([]);
 
   useEffect(() => {
     if (!loading) {
@@ -65,6 +75,17 @@ export default function Pantry() {
     }
   };
 
+  const extractIngredientsWithGPT = async (recipeText: string): Promise<string[]> => {
+    const res = await fetch("/api/extract-ingredients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipe: recipeText }),
+    });
+
+    const data = await res.json();
+    return data.ingredients || [];
+  };
+
   const generateRecipes = async () => {
     const pantryIngredients = ingredients.map((item) => item.ingredient);
     if (pantryIngredients.length === 0) return;
@@ -80,12 +101,20 @@ export default function Pantry() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
 
-      const parsed = data.recipes
-        .split(/\n?\d\.\s+/)
-        .filter(Boolean)
-        .map((r: string) => r.trim());
-
+      const parsed: Recipe[] = JSON.parse(data.recipes);
       setRecipes(parsed);
+
+      let allIngredients: string[] = [];
+      for (const recipe of parsed) {
+        const extracted = await extractIngredientsWithGPT(
+          `${recipe.title}: ${recipe.instructions.join(" ")}`
+        );
+        allIngredients.push(...extracted.map((ing) => ing.toLowerCase()));
+      }
+
+      const pantrySet = new Set(pantryIngredients.map((i) => i.toLowerCase()));
+      const missing = allIngredients.filter((item) => !pantrySet.has(item));
+      setShoppingList([...new Set(missing)]);
     } catch (err: any) {
       console.error("Recipe generation error:", err);
     } finally {
@@ -158,46 +187,85 @@ export default function Pantry() {
         {recipes.length > 0 && (
           <div className="mt-8 space-y-6">
             <h2 className="text-xl font-bold mb-4 text-center">🍽️ Suggested Recipes</h2>
-            {recipes.map((recipe, idx) => {
-  const title = recipe.split("-")[0].trim();
+            {recipes.map((recipe, idx) => (
+              <div
+                key={idx}
+                className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
+              >
+                <h3 className="font-semibold text-lg text-green-700 mb-1">
+                  {recipe.title}
+                </h3>
+                <p className="text-gray-600 mb-2">{recipe.summary}</p>
 
-  return (
-    <div
-      key={idx}
-      className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
-    >
-      <h3 className="font-semibold text-lg text-green-700 mb-2">
-        Recipe {idx + 1}: {title}
-      </h3>
-      <p className="text-gray-700 leading-relaxed mb-4">{recipe}</p>
+                <h4 className="font-semibold text-sm text-gray-700 mb-1">Instructions:</h4>
+                <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm space-y-1">
+                  {recipe.instructions.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ul>
 
-      {user ? (
-        <button
-          onClick={async () => {
-            const { error } = await supabase.from("favorites").insert({
-              user_id: user.id,
-              recipe_title: title,
-              recipe_text: recipe,
-            });
+                {recipe.substitutes.length > 0 && (
+                  <>
+                    <h4 className="font-semibold text-sm text-gray-700 mb-1">Substitutes:</h4>
+                    <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm">
+                      {recipe.substitutes.map((sub, i) => (
+                        <li key={i}>{sub}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
 
-            if (error) {
-              console.error("Error saving favorite:", error);
-              alert("Failed to save favorite");
-            } else {
-              alert("⭐ Saved to favorites!");
-            }
-          }}
-          className="text-sm px-4 py-2 bg-yellow-400 text-black rounded hover:bg-yellow-500"
-        >
-          ⭐ Save to Favorites
-        </button>
-      ) : (
-        <p className="text-sm text-gray-500">Log in to save this recipe ⭐</p>
-      )}
-    </div>
-  );
-})}
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from("favorites").insert({
+                      user_id: user.id,
+                      recipe_title: recipe.title,
+                      recipe_text: JSON.stringify(recipe),
+                    });
 
+                    if (error) {
+                      console.error("Error saving favorite:", error);
+                      alert("Failed to save favorite");
+                    } else {
+                      alert("⭐ Saved to favorites!");
+                    }
+                  }}
+                  className="text-sm px-4 py-2 bg-yellow-400 text-black rounded hover:bg-yellow-500"
+                >
+                  ⭐ Save to Favorites
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {shoppingList.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xl font-bold mb-2 text-center">🛒 Shopping List</h2>
+            <ul className="list-disc pl-6 space-y-1 text-gray-800 mb-3">
+              {shoppingList.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+            <div className="flex gap-4">
+              <button
+                onClick={() =>
+                  navigator.clipboard.writeText(shoppingList.join("\n"))
+                }
+                className="text-sm bg-gray-200 px-3 py-2 rounded hover:bg-gray-300"
+              >
+                📋 Copy to Clipboard
+              </button>
+              <a
+                href={`data:text/plain;charset=utf-8,${encodeURIComponent(
+                  shoppingList.join("\n")
+                )}`}
+                download="shopping-list.txt"
+                className="text-sm bg-blue-100 px-3 py-2 rounded hover:bg-blue-200"
+              >
+                ⬇️ Download List
+              </a>
+            </div>
           </div>
         )}
       </main>

@@ -3,11 +3,19 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import NavBar from "@/components/NavBar";
 
+// 🧱 Type definition for structured GPT recipes
+type Recipe = {
+  title: string;
+  summary: string;
+  instructions: string[];
+  substitutes: string[];
+};
+
 export default function Home() {
   const { user } = useUser();
 
   const [input, setInput] = useState("");
-  const [recipes, setRecipes] = useState<string[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,19 +45,14 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
 
-      const parsedRecipes = data.recipes
-        .split(/\n?\d\.\s+/)
-        .filter(Boolean)
-        .map((r: string) => r.trim());
-
-      setRecipes(parsedRecipes);
+      const parsed: Recipe[] = JSON.parse(data.recipes);
+      setRecipes(parsed);
 
       if (user && user.id) {
-        for (const recipe of parsedRecipes) {
-          const title = recipe.split("-")[0].trim();
+        for (const recipe of parsed) {
           const { error } = await supabase.from("recipe_history").insert({
             user_id: user.id,
-            recipe_title: title,
+            recipe_title: recipe.title,
             ingredients_used: input,
           });
           if (error) {
@@ -96,25 +99,44 @@ export default function Home() {
 
         {error && <p className="mt-6 text-red-500 text-center">{error}</p>}
 
-        <div className="mt-8 space-y-6">
-          {recipes.map((recipe, idx) => {
-            const title = recipe.split("-")[0].trim();
-            return (
+        {recipes.length > 0 && (
+          <div className="mt-8 space-y-6">
+            <h2 className="text-xl font-bold mb-4 text-center">🍽️ Recipes</h2>
+            {recipes.map((recipe, idx) => (
               <div
                 key={idx}
                 className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
               >
-                <h2 className="font-semibold text-lg text-green-700 mb-2">
-                  🍽️ Recipe {idx + 1}: {title}
-                </h2>
-                <p className="text-gray-700 leading-relaxed mb-4">{recipe}</p>
+                <h3 className="font-semibold text-lg text-green-700 mb-1">
+                  {recipe.title}
+                </h3>
+                <p className="text-gray-600 mb-2">{recipe.summary}</p>
+
+                <h4 className="font-semibold text-sm text-gray-700 mb-1">Instructions:</h4>
+                <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm space-y-1">
+                  {recipe.instructions.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ul>
+
+                {recipe.substitutes.length > 0 && (
+                  <>
+                    <h4 className="font-semibold text-sm text-gray-700 mb-1">Substitutes:</h4>
+                    <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm">
+                      {recipe.substitutes.map((sub, i) => (
+                        <li key={i}>{sub}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
                 {user ? (
                   <button
                     onClick={async () => {
                       const { error } = await supabase.from("favorites").insert({
                         user_id: user.id,
-                        recipe_title: title,
-                        recipe_text: recipe,
+                        recipe_title: recipe.title,
+                        recipe_text: JSON.stringify(recipe),
                       });
 
                       if (error) {
@@ -134,9 +156,9 @@ export default function Home() {
                   </p>
                 )}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
     </>
   );
