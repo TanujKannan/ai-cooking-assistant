@@ -101,7 +101,13 @@ export default function Pantry() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
 
-      const parsed: Recipe[] = JSON.parse(data.recipes);
+      const raw = data.recipes || "";
+const cleaned = raw
+  .replace(/```json\\n?|```/gi, "")
+  .replace(/^json\\n?|^json/gi, "")
+  .trim();
+
+const parsed: Recipe[] = JSON.parse(cleaned);
       setRecipes(parsed);
 
       let allIngredients: string[] = [];

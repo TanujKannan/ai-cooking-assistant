@@ -3,7 +3,8 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { OpenAI } from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY, // Gemini-compatible key
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", // Point to Gemini API
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -13,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gemini-2.0-flash",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
     });
@@ -26,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({ ingredients });
   } catch (error) {
-    console.error("GPT extract error:", error);
+    console.error("Gemini extract error:", error);
     res.status(500).json({ error: "Failed to extract ingredients" });
   }
 }

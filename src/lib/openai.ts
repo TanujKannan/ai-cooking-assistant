@@ -2,7 +2,8 @@
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY, // This is your Gemini API key
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", // Gemini-compatible OpenAI API
 });
 
 export async function getRecipesFromIngredients(ingredients: string[]) {
@@ -24,14 +25,16 @@ Return ONLY a JSON array of objects in this format:
 Each recipe should use available ingredients or suggest common substitutions.
 Do not include any explanation before or after the JSON.`;
 
-
-
-
   const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
+    model: "gemini-2.0-flash",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7,
   });
 
-  return response.choices[0].message.content;
+  const rawContent = response.choices[0].message.content || "";
+
+  // 🧼 Remove code block if wrapped in triple backticks
+  const cleaned = rawContent.replace(/```json\\n?|```/g, "").trim();
+
+  return cleaned;
 }

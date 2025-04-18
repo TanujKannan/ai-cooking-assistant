@@ -23,17 +23,17 @@ export default function Home() {
     e.preventDefault();
     setError("");
     setRecipes([]);
-
+  
     const ingredients = input
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
-
+  
     if (ingredients.length === 0) {
       setError("Please enter at least one ingredient.");
       return;
     }
-
+  
     setLoading(true);
     try {
       const res = await fetch("/api/suggest", {
@@ -41,13 +41,19 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ingredients }),
       });
-
+  
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
-
-      const parsed: Recipe[] = JSON.parse(data.recipes);
+  
+      // ✅ Clean and parse JSON safely
+      const raw = data.recipes || "";
+      const cleaned = raw
+  .replace(/```json\\n?|```/gi, "")
+  .replace(/^json\\n?|^json/gi, "")
+  .trim();
+      const parsed: Recipe[] = JSON.parse(cleaned);
       setRecipes(parsed);
-
+  
       if (user && user.id) {
         for (const recipe of parsed) {
           const { error } = await supabase.from("recipe_history").insert({
@@ -61,11 +67,13 @@ export default function Home() {
         }
       }
     } catch (err: any) {
-      setError(err.message);
+      setError("Error parsing recipe response: " + err.message);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <>
