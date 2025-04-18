@@ -19,6 +19,11 @@ type Recipe = {
   substitutes: string[];
 };
 
+type ExtractedItem = {
+  ingredient: string;
+  quantity: string;
+};
+
 export default function Pantry() {
   const { user, loading } = useUser();
   const router = useRouter();
@@ -26,6 +31,7 @@ export default function Pantry() {
   const [ingredients, setIngredients] = useState<PantryItem[]>([]);
   const [input, setInput] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingRecipes, setLoadingRecipes] = useState(false);
@@ -68,6 +74,37 @@ export default function Pantry() {
       setInput("");
       setQuantity("");
       loadPantry();
+    }
+  };
+
+  const handleReceiptUpload = async () => {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/receipt", {
+        method: "POST",
+        body: formData,
+      });
+
+      const { items }: { items: ExtractedItem[] } = await res.json();
+
+      for (const item of items) {
+        await supabase.from("pantry").insert({
+          user_id: user?.id,
+          ingredient: item.ingredient,
+          quantity: item.quantity,
+        });
+      }
+
+      alert("Pantry updated from receipt!");
+      setFile(null);
+      loadPantry();
+    } catch (err) {
+      console.error("Receipt upload error:", err);
+      alert("Failed to process receipt");
     }
   };
 
@@ -194,69 +231,83 @@ export default function Pantry() {
           ))}
         </ul>
 
-        <button
-          onClick={generateRecipes}
-          className="bg-blue-600 text-white w-full py-3 rounded hover:bg-blue-700 transition"
-        >
-          🍳 Generate Recipes Based on My Pantry
-        </button>
+        <div className="my-6">
+          <label className="block text-sm font-medium mb-1">Upload Receipt</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block mb-2"
+          />
+          <button
+            onClick={handleReceiptUpload}
+            disabled={!file}
+            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+          >
+            🧾 Process Receipt with Gemini
+          </button>
+        </div>
 
-        {loadingRecipes && (
-          <p className="mt-6 text-blue-500 text-center animate-pulse">Thinking... 🧠</p>
-        )}
+        <div className="my-6">
+          <button
+            onClick={generateRecipes}
+            className="bg-blue-600 text-white w-full py-3 rounded hover:bg-blue-700 transition"
+          >
+            🍳 Generate Recipes Based on My Pantry
+          </button>
+        </div>
 
         {recipes.length > 0 && (
-          <div className="mt-8 space-y-6">
+          <div className="mt-10">
             <h2 className="text-xl font-bold mb-4 text-center">🍽️ Suggested Recipes</h2>
-            {recipes.map((recipe, idx) => (
-              <div
-                key={idx}
-                className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
-              >
-                <h3 className="font-semibold text-lg text-green-700 mb-1">
-                  {recipe.title}
-                </h3>
-                <p className="text-gray-600 mb-2">{recipe.summary}</p>
-
-                <h4 className="font-semibold text-sm text-gray-700 mb-1">Instructions:</h4>
-                <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm space-y-1">
-                  {recipe.instructions.map((step, i) => (
-                    <li key={i}>{step}</li>
-                  ))}
-                </ul>
-
-                {recipe.substitutes.length > 0 && (
-                  <>
-                    <h4 className="font-semibold text-sm text-gray-700 mb-1">Substitutes:</h4>
-                    <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm">
-                      {recipe.substitutes.map((sub, i) => (
-                        <li key={i}>{sub}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-
-                <button
-                  onClick={async () => {
-                    const { error } = await supabase.from("favorites").insert({
-                      user_id: user.id,
-                      recipe_title: recipe.title,
-                      recipe_text: JSON.stringify(recipe),
-                    });
-
-                    if (error) {
-                      console.error("Error saving favorite:", error);
-                      alert("Failed to save favorite");
-                    } else {
-                      alert("⭐ Saved to favorites!");
-                    }
-                  }}
-                  className="text-sm px-4 py-2 bg-yellow-400 text-black rounded hover:bg-yellow-500"
+            <div className="space-y-4">
+              {recipes.map((recipe, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
                 >
-                  ⭐ Save to Favorites
-                </button>
-              </div>
-            ))}
+                  <h3 className="font-semibold text-lg text-green-700 mb-1">
+                    {recipe.title}
+                  </h3>
+                  <p className="text-gray-600 mb-2">{recipe.summary}</p>
+                  <h4 className="font-semibold text-sm text-gray-700 mb-1">Instructions:</h4>
+                  <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm space-y-1">
+                    {recipe.instructions.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ul>
+                  {recipe.substitutes.length > 0 && (
+                    <>
+                      <h4 className="font-semibold text-sm text-gray-700 mb-1">Substitutes:</h4>
+                      <ul className="list-disc pl-5 mb-2 text-gray-800 text-sm">
+                        {recipe.substitutes.map((sub, i) => (
+                          <li key={i}>{sub}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const { error } = await supabase.from("favorites").insert({
+                        user_id: user.id,
+                        recipe_title: recipe.title,
+                        recipe_text: JSON.stringify(recipe),
+                      });
+
+                      if (error) {
+                        console.error("Error saving favorite:", error);
+                        alert("Failed to save favorite");
+                      } else {
+                        alert("⭐ Saved to favorites!");
+                      }
+                    }}
+                    className="text-sm px-4 py-2 bg-yellow-400 text-black rounded hover:bg-yellow-500"
+                  >
+                    ⭐ Save to Favorites
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -267,61 +318,58 @@ export default function Pantry() {
               These are ingredients used in the suggested recipes but not found in your pantry.
               Consider adding them to make the dishes!
             </p>
-
             <ul className="list-disc pl-6 space-y-2 text-gray-800 mb-3">
-            {shoppingList.map((item, idx) => {
+              {shoppingList.map((item, idx) => {
                 const qty = quantities[item.ingredient] || "";
 
                 const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-                    setQuantities((prev) => ({
+                  setQuantities((prev) => ({
                     ...prev,
                     [item.ingredient]: e.target.value,
-                    }));
+                  }));
                 };
 
                 const addToPantry = async () => {
-                    const { error } = await supabase.from("pantry").insert({
+                  const { error } = await supabase.from("pantry").insert({
                     user_id: user?.id,
                     ingredient: item.ingredient,
                     quantity: qty || null,
-                    });
-                    if (error) {
+                  });
+                  if (error) {
                     console.error("Failed to add to pantry:", error);
                     alert("Error adding to pantry");
-                    } else {
+                  } else {
                     alert(`${item.ingredient} added to pantry`);
                     loadPantry();
                     setQuantities((prev) => ({ ...prev, [item.ingredient]: "" }));
-                    }
+                  }
                 };
 
                 return (
-                    <li key={idx} className="space-y-1">
+                  <li key={idx} className="space-y-1">
                     <span className="font-semibold">{item.ingredient}</span>
                     <span className="text-sm text-gray-600">
-                        {" "}
-                        — used in: {item.recipes.join(", ")}
+                      {" "} — used in: {item.recipes.join(", ")}
                     </span>
                     <div className="flex gap-2 mt-1">
-                        <input
+                      <input
                         type="text"
                         value={qty}
                         onChange={handleQtyChange}
                         placeholder="Quantity"
                         className="border rounded px-2 py-1 text-sm w-1/2"
-                        />
-                        <button
+                      />
+                      <button
                         onClick={addToPantry}
                         className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
-                        >
+                      >
                         ➕ Add to Pantry
-                        </button>
+                      </button>
                     </div>
-                    </li>
+                  </li>
                 );
-                })}
+              })}
             </ul>
-
             <div className="flex gap-4">
               <button
                 onClick={() =>
@@ -331,7 +379,7 @@ export default function Pantry() {
                 }
                 className="text-sm bg-gray-200 px-3 py-2 rounded hover:bg-gray-300"
               >
-                📋 Copy to Clipboard
+                🗌 Copy to Clipboard
               </button>
               <a
                 href={`data:text/plain;charset=utf-8,${encodeURIComponent(
@@ -348,4 +396,4 @@ export default function Pantry() {
       </main>
     </>
   );
-}
+} 

@@ -2,7 +2,7 @@
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // This is your Gemini API key
+  apiKey: process.env.GEMINI_API_KEY, // This is your Gemini API key
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", // Gemini-compatible OpenAI API
 });
 

@@ -3,7 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { OpenAI } from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Gemini-compatible key
+  apiKey: process.env.GEMINI_API_KEY, // Gemini-compatible key
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", // Point to Gemini API
 });
 
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-pro",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
     });
