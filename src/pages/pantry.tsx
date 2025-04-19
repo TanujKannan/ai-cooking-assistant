@@ -406,6 +406,7 @@ export default function Pantry() {
             </div>
           </section>
         )}
+        
       </main>
     </>
   );

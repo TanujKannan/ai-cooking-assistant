@@ -28,6 +28,9 @@ export default function NavBar() {
           <Link href="/receipts" className="hover:underline">
             🧾 Receipts
           </Link>
+          <Link href="/nearby" className="hover:underline">
+           📍 Find spots
+          </Link>
         </div>
 
         {user && (
