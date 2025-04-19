@@ -22,7 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
     const prompt = `
-You're a smart kitchen assistant. This is a grocery receipt. Sort the items based on the quantity. Extract the items and quantities in this JSON format:
+You are a smart kitchen assistant. Given the following grocery receipt, extract only the **food items** and sort them by quantity, from highest to lowest.
+
+
+- Exclude any non-item lines such as "SPECIAL", "SUBTOTAL", "LOYALTY", or other discount lines.
+- Items with numeric quantities and units should appear at the top.
+- Items without any quantity or unit should be included, but placed at the bottom.
+
+Return the result as a JSON array using the following structure:
 [
   { "ingredient": "eggs", "quantity": "12" },
   { "ingredient": "milk", "quantity": "1 gallon" }
