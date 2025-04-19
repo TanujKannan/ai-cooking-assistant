@@ -25,6 +25,9 @@ export default function NavBar() {
           <Link href="/dashboard" className="hover:underline">
             📊 Dashboard
           </Link>
+          <Link href="/receipts" className="hover:underline">
+            🧾 Receipts
+          </Link>
         </div>
 
         {user && (

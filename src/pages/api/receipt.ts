@@ -1,24 +1,28 @@
-// /pages/api/receipt.ts
 import { NextApiRequest, NextApiResponse } from "next";
-import fs from "fs";
-import formidable, { IncomingForm } from "formidable";
+import { createClient } from "@supabase/supabase-js";
 
-export const config = {
-  api: { bodyParser: false },
-};
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const form = new IncomingForm();
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  form.parse(req, async (_err, _fields, files) => {
-    const uploadedFile = Array.isArray(files.file) ? files.file[0] : files.file;
-    if (!uploadedFile) return res.status(400).json({ error: "No file uploaded" });
+  const { fileUrl, userId } = req.body;
+  if (!fileUrl || !userId) {
+    return res.status(400).json({ error: "Missing file URL or user ID" });
+  }
 
-    const imageBuffer = fs.readFileSync(uploadedFile.filepath);
-    const base64Image = imageBuffer.toString("base64");
+  try {
+    const imageRes = await fetch(fileUrl);
+    const arrayBuffer = await imageRes.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString("base64");
 
     const prompt = `
-You're a smart kitchen assistant. This is a grocery receipt. Extract the items and quantities in this JSON format:
+You're a smart kitchen assistant. This is a grocery receipt. Sort the items based on the quantity. Extract the items and quantities in this JSON format:
 [
   { "ingredient": "eggs", "quantity": "12" },
   { "ingredient": "milk", "quantity": "1 gallon" }
@@ -37,7 +41,7 @@ You're a smart kitchen assistant. This is a grocery receipt. Extract the items a
                 { text: prompt },
                 {
                   inlineData: {
-                    mimeType: uploadedFile.mimetype || "image/jpeg",
+                    mimeType: "image/jpeg",
                     data: base64Image,
                   },
                 },
@@ -51,18 +55,23 @@ You're a smart kitchen assistant. This is a grocery receipt. Extract the items a
     const responseData = await geminiRes.json();
     const rawText = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
 
-    try {
-      // ✅ Clean the response to remove ```json and ``` wrappers
-      const cleaned = rawText
-        .replace(/```json\n?|```/gi, "")
-        .replace(/^json\n?/gi, "")
-        .trim();
+    const cleaned = rawText
+      .replace(/```json\n?|```/gi, "")
+      .replace(/^json\n?/gi, "")
+      .trim();
 
-      const items = JSON.parse(cleaned);
-      return res.status(200).json({ items });
-    } catch (err) {
-      console.error("Failed to parse response:", rawText);
-      return res.status(500).json({ error: "Failed to parse Gemini output", raw: rawText });
-    }
-  });
+    const items = JSON.parse(cleaned);
+
+    // Save the receipt and parsed items to the Supabase database
+    await supabase.from("receipts").insert({
+      user_id: userId,
+      file_url: fileUrl,
+      parsed_items: items,
+    });
+
+    return res.status(200).json({ items });
+  } catch (err) {
+    console.error("Failed to process receipt:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 }
